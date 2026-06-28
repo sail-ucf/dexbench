@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
+import argparse
 
 
 plt.style.use('default')
@@ -93,13 +94,11 @@ def clean_model_name(model_name):
     else:
         return model_name
 
-def create_open_source_tables():
+def create_open_source_tables(input_csv, output_dir):
     """Create tables for all open-source models"""
     print("Creating Open Source models tables...")
 
-
-    csv_path = 'evaluation_results_open_source/fixed/evaluation_results_debug/debug_results.csv'
-    detailed_df = pd.read_csv(csv_path)
+    detailed_df = pd.read_csv(input_csv)
 
     print(f"Total rows in open-source CSV: {len(detailed_df)}")
     print(f"Unique models: {len(detailed_df['model'].unique())}")
@@ -108,8 +107,7 @@ def create_open_source_tables():
     models = detailed_df['model'].unique()
 
 
-    output_dir = Path("visuals_open_source")
-    output_dir.mkdir(exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
 
     for model in models:
@@ -265,20 +263,47 @@ def create_open_source_tables():
         output_dir / "all_models_pass5_summary.png"
     )
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Create table visualizations for open-source model results."
+    )
+
+    parser.add_argument(
+        "--input-csv",
+        type=Path,
+        default=Path(
+            "evaluation_results_open_source/fixed/"
+            "evaluation_results_debug/debug_results.csv"
+        ),
+        help="Path to the open-source evaluation results CSV."
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("visuals_open_source"),
+        help="Directory where the generated PNG tables will be saved."
+    )
+
+    return parser.parse_args()
+
 def main():
     """Main execution function"""
+
+    args = parse_args()
+
     print("="*80)
     print("CREATING TABLE VISUALIZATIONS FOR OPEN SOURCE MODELS")
     print("="*80)
 
 
-    create_open_source_tables()
+    create_open_source_tables(args.input_csv, args.output_dir)
 
     print("\n" + "="*80)
     print("ALL OPEN SOURCE VISUALIZATIONS CREATED SUCCESSFULLY!")
     print("="*80)
 
-    output_dir = Path("visuals_open_source")
+    output_dir = args.output_dir
     print(f"\n Tables saved in: {output_dir}/")
 
 
