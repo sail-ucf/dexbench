@@ -1,9 +1,9 @@
 import pandas as pd
 import os
+import argparse
 
-def analyze_closed_source_models():
+def analyze_closed_source_models(csv_path):
     """Analyze closed-source models from the main CSV file"""
-    csv_path = 'evaluation_reports/detailed_results.csv'
 
     if not os.path.exists(csv_path):
         print(f"Error: CSV file not found: {csv_path}")
@@ -58,9 +58,8 @@ def analyze_closed_source_models():
 
     return results
 
-def analyze_open_source_models():
+def analyze_open_source_models(csv_path):
     """Analyze open-source models from the open-source CSV file"""
-    csv_path = 'evaluation_results_open_source/fixed/evaluation_results_debug/debug_results.csv'
 
     if not os.path.exists(csv_path):
         print(f"Error: CSV file not found: {csv_path}")
@@ -238,7 +237,7 @@ def clean_model_name_for_display(model_name):
     else:
         return model_name
 
-def save_to_csv(closed_source_results, open_source_results):
+def save_to_csv(closed_source_results, open_source_results, output_csv):
     """Save results to CSV file for further analysis"""
 
     all_data = []
@@ -270,10 +269,39 @@ def save_to_csv(closed_source_results, open_source_results):
             })
 
     df = pd.DataFrame(all_data)
-    df.to_csv('model_discrepancy_analysis.csv', index=False)
-    print(f"\nDetailed results saved to: model_discrepancy_analysis.csv")
+    df.to_csv(output_csv, index=False)
+    print(f"\nDetailed results saved to: {output_csv}")
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description= "Analyze forward and backward model performance discrepancies."
+    )
+
+    parser.add_argument(
+        "--closed-source-csv",
+        default = "evaluation_reports/detailed_results.csv",
+        help="Path to the closed-source evaluation results CSV."
+    )
+
+    parser.add_argument(
+        "--open-source-csv",
+        default="evaluation_results_open_source/fixed/evaluation_results_debug/debug_results.csv",
+        help="Path to the open-source evaluation results CSV."
+    )
+
+    parser.add_argument(
+        "--output-csv",
+        default="model_discrepancy_analysis.csv",
+        help="Path where the discrepancy analysis CSV will be saved."
+    )
+
+    return parser.parse_args()
+
 
 def main():
+
+    args = parse_args()
+    
     print("Analyzing model performance discrepancies...")
     print("=" * 90)
     print("Analyzing four categories for each model:")
@@ -285,17 +313,17 @@ def main():
 
 
     print("\nAnalyzing closed-source models...")
-    closed_source_results = analyze_closed_source_models()
+    closed_source_results = analyze_closed_source_models(args.closed_source_csv)
 
 
     print("Analyzing open-source models...")
-    open_source_results = analyze_open_source_models()
+    open_source_results = analyze_open_source_models(args.open_source_csv)
 
 
     print_results(closed_source_results, open_source_results)
 
 
-    save_to_csv(closed_source_results, open_source_results)
+    save_to_csv(closed_source_results, open_source_results, args.output_csv)
 
     print("\n" + "=" * 90)
     print("Analysis complete!")
