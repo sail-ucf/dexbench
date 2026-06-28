@@ -56,7 +56,8 @@ def run_script_with_timeout(code_str: str, timeout=1):
         cov.save()
 
         try:
-            lines = cov.get_data().lines(tmp_path)
+            lookup_path = os.path.realpath(tmp_path)
+            lines = cov.get_data().lines(lookup_path)
             if lines:
                 executed = set(lines)
                 print(f"    Coverage collected: {len(executed)} lines executed")

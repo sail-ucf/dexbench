@@ -16,7 +16,7 @@ import numpy as np
 ROOT = Path(".")
 COVERAGE_JSON_ABLATION = ROOT / "data" / "programs" / "ablation_study_programs_with_coverage.json"
 COVERAGE_JSON_ORIGINAL = ROOT / "data" / "programs" / "runner_programs_with_coverage.json"
-INPUT_PLACEHOLDER = "DEXBENCH_INPUT_PLACEHOLDER"
+INPUT_PLACEHOLDER = "??"
 
 
 ABLATION_DIR = ROOT / "API_Model_Outputs_Ablation_grok"
@@ -56,7 +56,8 @@ def run_script_with_timeout(code_str: str, timeout=1):
         cov.save()
 
         try:
-            lines = cov.get_data().lines(tmp_path)
+            lookup_path = os.path.realpath(tmp_path)
+            lines = cov.get_data().lines(lookup_path)
             if lines:
                 executed = set(lines)
                 print(f"    Coverage collected: {len(executed)} lines executed")
