@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
+import argparse
 
 
 plt.style.use('default')
@@ -84,12 +85,12 @@ def create_table_visualization(table_df, title, output_path):
     plt.close()
     print(f"OK Saved: {output_path}")
 
-def create_main_study_tables():
+def create_main_study_tables(input_csv, output_dir):
     """Create tables for Main Study (4 LLMs)"""
     print("Creating Main Study tables...")
 
 
-    detailed_df = pd.read_csv("evaluation_reports/detailed_results.csv")
+    detailed_df = pd.read_csv(input_csv)
 
 
     detailed_df = detailed_df[~detailed_df['model'].isin(['AI21-Jamba-Reasoning-3B', 'Llama-3.1-Nemotron-Nano-8B-v1'])]
@@ -190,9 +191,7 @@ def create_main_study_tables():
 
     pass5_df = pd.DataFrame(pass5_data)
 
-
-    output_dir = Path("tables")
-    output_dir.mkdir(exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
 
     create_table_visualization(
@@ -208,12 +207,12 @@ def create_main_study_tables():
         output_dir / "main_study_pass5_table.png"
     )
 
-def create_ablation_study_tables():
+def create_ablation_study_tables(input_csv, output_dir):
     """Create tables for Ablation Study (GPT-5-mini only)"""
     print("Creating Ablation Study tables...")
 
 
-    ablation_df = pd.read_csv("ablation_evaluation_reports/ablation_detailed_results.csv")
+    ablation_df = pd.read_csv(input_csv)
 
 
     pass1_data = []
@@ -286,9 +285,7 @@ def create_ablation_study_tables():
 
     pass5_df = pd.DataFrame(pass5_data)
 
-
-    output_dir = Path("tables")
-    output_dir.mkdir(exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
 
     create_table_visualization(
@@ -304,12 +301,12 @@ def create_ablation_study_tables():
         output_dir / "ablation_study_pass5_table.png"
     )
 
-def create_rap_study_tables():
+def create_rap_study_tables(input_csv, output_dir):
     """Create tables for RAP Study (GPT-5-mini only)"""
     print("Creating RAP Study tables...")
 
 
-    rap_df = pd.read_csv("rap_evaluation_reports/rap_detailed_results.csv")
+    rap_df = pd.read_csv(input_csv)
 
 
     pass1_data = []
@@ -399,10 +396,7 @@ def create_rap_study_tables():
 
     pass5_df = pd.DataFrame(pass5_data)
 
-
-    output_dir = Path("tables")
-    output_dir.mkdir(exist_ok=True)
-
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     create_table_visualization(
         pass1_df,
@@ -417,12 +411,12 @@ def create_rap_study_tables():
         output_dir / "rap_study_pass5_table.png"
     )
 
-def create_least_coverage_study_tables():
+def create_least_coverage_study_tables(input_csv, output_dir):
     """Create tables for Least Coverage Study (GPT-5-mini only)"""
     print("Creating Least Coverage Study tables...")
 
 
-    lc_df = pd.read_csv("evaluation_reports_least_coverage/least_coverage_detailed_results.csv")
+    lc_df = pd.read_csv(input_csv)
 
 
     pass1_lc_data = []
@@ -495,9 +489,7 @@ def create_least_coverage_study_tables():
 
     pass5_lc_df = pd.DataFrame(pass5_lc_data)
 
-
-    output_dir = Path("tables")
-    output_dir.mkdir(exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
 
     create_table_visualization(
@@ -513,22 +505,86 @@ def create_least_coverage_study_tables():
         output_dir / "least_coverage_study_pass5_table.png"
     )
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Create table visualizations for all DEXBENCH studies."
+    )
+
+    parser.add_argument(
+        "--main-results-csv",
+        type=Path,
+        default=Path("evaluation_reports/detailed_results.csv"),
+        help="Path to the main-study detailed results CSV."
+    )
+
+    parser.add_argument(
+        "--ablation-results-csv",
+        type=Path,
+        default=Path(
+            "ablation_evaluation_reports/ablation_detailed_results.csv"
+        ),
+        help="Path to the ablation-study detailed results CSV."
+    )
+
+    parser.add_argument(
+        "--rap-results-csv",
+        type=Path,
+        default=Path("rap_evaluation_reports/rap_detailed_results.csv"),
+        help="Path to the RAP-study detailed results CSV."
+    )
+
+    parser.add_argument(
+        "--least-coverage-results-csv",
+        type=Path,
+        default=Path(
+            "evaluation_reports_least_coverage/"
+            "least_coverage_detailed_results.csv"
+        ),
+        help="Path to the least-coverage detailed results CSV."
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("tables"),
+        help="Directory where generated PNG tables will be saved."
+    )
+
+    return parser.parse_args()
+
 def main():
     """Main execution function"""
+    
+    args = parse_args()
+    
     print("="*80)
     print("CREATING TABLE VISUALIZATIONS FOR ALL 4 STUDIES")
     print("="*80)
 
 
-    tables_dir = Path("tables")
-    tables_dir.mkdir(exist_ok=True)
+    tables_dir = args.output_dir
+    tables_dir.mkdir(parents=True, exist_ok=True)
 
 
-    create_main_study_tables()
-    create_ablation_study_tables()
-    create_rap_study_tables()
-    create_least_coverage_study_tables()
+    create_main_study_tables(
+        args.main_results_csv,
+        args.output_dir
+    )
 
+    create_ablation_study_tables(
+        args.ablation_results_csv,
+        args.output_dir
+    )
+
+    create_rap_study_tables(
+        args.rap_results_csv,
+        args.output_dir
+    )
+
+    create_least_coverage_study_tables(
+        args.least_coverage_results_csv,
+        args.output_dir
+    )
     print("\n" + "="*80)
     print("ALL VISUALIZATIONS CREATED SUCCESSFULLY!")
     print("="*80)
