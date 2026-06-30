@@ -1,12 +1,13 @@
 import json
 import re
 import os
+import argparse
 from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
 
-ROOT = Path(".")
+
 MODELS = {
     "gpt-5-mini": {
         "CRISPE": "API_Model_Outputs_CRISPE",
@@ -20,13 +21,40 @@ MODELS = {
     }
 }
 EXPERIMENTS = ["CRISPE", "CRISPE_no_focc", "CRISPE_no_examplar"]
-GROUND_TRUTH_FILE = ROOT / "data" / "programs" / "focc" / "all_programs_foccs.json"
 
 
 ANSWER_RE = re.compile(r"\[ANSWER\](.*?)\[/ANSWER\]", re.DOTALL)
 
 
 DEBUG = False
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Compare LLM coverage answers against ground-truth FOCCs."
+    )
+
+    parser.add_argument(
+        "--ground-truth-file",
+        type=Path,
+        default=Path("src/evaluation/data/programs/focc/all_programs_foccs.json"),
+        help="Path to the ground-truth FOCC JSON file."
+    )
+
+    parser.add_argument(
+        "--outputs-root",
+        type=Path,
+        default=Path("src/evaluation"),
+        help="Parent directory containing the model-output directories."
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("focc_analysis_results"),
+        help="Directory where analysis CSV files will be saved."
+    )
+
+    return parser.parse_args()
 
 def debug_print(msg):
     """Print debug messages if DEBUG is True."""
@@ -118,10 +146,10 @@ def parse_foccs(foccs_list):
 
     return parsed_foccs
 
-def load_ground_truth():
+def load_ground_truth(ground_truth_file: Path):
     """Load ground truth FOCCs from JSON file and normalize IDs."""
     try:
-        with open(GROUND_TRUTH_FILE, 'r') as f:
+        with open(ground_truth_file, 'r') as f:
             data = json.load(f)
     except Exception as e:
         print(f"Error loading ground truth: {e}")
@@ -146,7 +174,7 @@ def load_ground_truth():
     print(f"Loaded {len(ground_truth)} programs with valid FOCCs from ground truth")
     return ground_truth
 
-def analyze_experiment(model, experiment, ground_truth):
+def analyze_experiment(model, experiment, ground_truth, outputs_root: Path):
     """Analyze one experiment for a specific model."""
     print(f"\n{'='*60}")
     print(f"STARTING ANALYSIS: {model}/{experiment}")
@@ -168,7 +196,7 @@ def analyze_experiment(model, experiment, ground_truth):
 
     if model in MODELS and experiment in MODELS[model]:
         base_dir_name = MODELS[model][experiment]
-        base_dir = ROOT / base_dir_name / model
+        base_dir = outputs_root / base_dir_name / model
         print(f"Looking in directory: {base_dir}")
     else:
         print(f"Invalid model/experiment combination: {model}/{experiment}")
@@ -380,9 +408,8 @@ def create_summary_table(all_results):
 
     return pd.DataFrame(summary_data)
 
-def save_detailed_results(all_results, ground_truth):
+def save_detailed_results(all_results, ground_truth, output_dir: Path):
     """Save detailed mismatch results to files."""
-    output_dir = ROOT / "focc_analysis_results"
     output_dir.mkdir(exist_ok=True)
 
 
@@ -418,12 +445,13 @@ def save_detailed_results(all_results, ground_truth):
             df_ids.to_csv(output_dir / f"{model}_{experiment}_pass5_mismatch_programs.csv", index=False)
 
 def main():
+    args = parse_args()
     print("=" * 80)
     print("LLM Answer vs FOCCs Analysis - COUNT MISMATCHES BY DATASET")
     print("=" * 80)
 
     print("\nLoading ground truth FOCCs...")
-    ground_truth = load_ground_truth()
+    ground_truth = load_ground_truth(args.ground_truth_file)
     if not ground_truth:
         print("Error: No ground truth data loaded")
         return
@@ -433,7 +461,7 @@ def main():
 
     for model in MODELS:
         for experiment in EXPERIMENTS:
-            results = analyze_experiment(model, experiment, ground_truth)
+            results = analyze_experiment(model, experiment, ground_truth, args.outputs_root)
             all_results[f"{model}_{experiment}"] = results
 
 
@@ -497,7 +525,7 @@ def main():
     print("\n" + summary_df.to_string(index=False))
 
 
-    output_dir = ROOT / "focc_analysis_results"
+    output_dir = args.output_dir
     output_dir.mkdir(exist_ok=True)
     summary_df.to_csv(output_dir / "mismatch_counts_by_dataset.csv", index=False)
 
