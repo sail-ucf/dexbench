@@ -1,9 +1,8 @@
-
-
 import json
 import numpy as np
 import os
 import re
+import argparse
 
 def count_all_lines(filepath: str) -> int:
     """Count ALL lines in a file exactly"""
@@ -15,19 +14,30 @@ def count_all_lines(filepath: str) -> int:
     except:
         return 0
 
-def get_cruxeval_filepath(program_num: str) -> str:
+def get_cruxeval_filepath(program_num: str, cruxeval_dir: str) -> str:
     """Get the filepath for a CRUXEval program"""
-    return f"data/CRUXEval/formatted_cruxeval_programs/sample_{program_num}.py"
+    return os.path.join(
+        cruxeval_dir,
+        f"sample_{program_num}.py"
+    )
 
-def get_humaneval_filepath(program_num: str) -> str:
+def get_humaneval_filepath(program_num: str, runner_programs_dir: str) -> str:
     """Get the filepath for a HumanEval program"""
-    return f"artifacts/programs/runner_programs/HumanEval_{program_num}/solution.py"
+    return os.path.join(
+        runner_programs_dir,
+        f"HumanEval_{program_num}",
+        "solution.py"
+    )
 
-def get_pythonsaga_filepath(program_num: str) -> str:
+def get_pythonsaga_filepath(program_num: str, runner_programs_dir: str) -> str:
     """Get the filepath for a PythonSaga program"""
-    return f"artifacts/programs/runner_programs/PythonSaga_{program_num}/solution.py"
-
-def calculate_accurate_statistics(json_file_path: str):
+    return os.path.join(
+        runner_programs_dir,
+        f"PythonSaga_{program_num}",
+        "solution.py"
+    )
+    
+def calculate_accurate_statistics(json_file_path: str,cruxeval_dir: str,runner_programs_dir: str):
     """Calculate accurate statistics by reading actual source files"""
 
     print("=" * 60)
@@ -89,19 +99,19 @@ def calculate_accurate_statistics(json_file_path: str):
                     match = re.search(r'CRUXEval/(\d+)', task_id)
                     if match:
                         program_num = match.group(1)
-                        filepath = get_cruxeval_filepath(program_num)
+                        filepath = get_cruxeval_filepath(program_num, cruxeval_dir)
 
                 elif dataset == "HumanEval":
                     match = re.search(r'HumanEval/(\d+)', task_id)
                     if match:
                         program_num = match.group(1)
-                        filepath = get_humaneval_filepath(program_num)
+                        filepath = get_humaneval_filepath(program_num, runner_programs_dir)
 
                 elif dataset == "PythonSaga":
                     match = re.search(r'PythonSaga/(\d+)', task_id)
                     if match:
                         program_num = match.group(1)
-                        filepath = get_pythonsaga_filepath(program_num)
+                        filepath = get_pythonsaga_filepath(program_num, runner_programs_dir)
 
 
                 if filepath and os.path.exists(filepath):
@@ -202,7 +212,7 @@ def calculate_accurate_statistics(json_file_path: str):
         match = re.search(r'HumanEval/(\d+)', "HumanEval/83")
         if match:
             program_num = match.group(1)
-            filepath = get_humaneval_filepath(program_num)
+            filepath = get_humaneval_filepath(program_num, runner_programs_dir)
 
             if os.path.exists(filepath):
                 with open(filepath, 'r') as f:
@@ -244,15 +254,43 @@ def calculate_accurate_statistics(json_file_path: str):
         import traceback
         traceback.print_exc()
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Calculate program statistics from source files."
+    )
+
+    parser.add_argument(
+        "--json-file",
+        default="artifacts/programs/runner_programs_with_coverage.json",
+        help="Path to the program metadata JSON file."
+    )
+
+    parser.add_argument(
+        "--cruxeval-dir",
+        default="data/CRUXEval/formatted_cruxeval_programs",
+        help="Directory containing formatted CRUXEval programs."
+    )
+
+    parser.add_argument(
+        "--runner-programs-dir",
+        default="artifacts/programs/runner_programs",
+        help="Directory containing HumanEval and PythonSaga runner programs."
+    )
+
+    return parser.parse_args()
+
 def main():
     """Main function"""
-    json_file_path = "artifacts/programs/runner_programs_with_coverage.json"
+    args = parse_args()
 
     print("Calculating ACCURATE statistics from source files...")
-    print(f"Reading from: {json_file_path}")
+    print(f"Reading from: {args.json_file}")
     print("-" * 50)
 
-    calculate_accurate_statistics(json_file_path)
-
+    calculate_accurate_statistics(
+        args.json_file,
+        args.cruxeval_dir,
+        args.runner_programs_dir
+    )
 if __name__ == "__main__":
     main()
