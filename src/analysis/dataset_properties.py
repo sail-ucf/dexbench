@@ -1,5 +1,3 @@
-
-
 import json
 import ast
 import numpy as np
@@ -7,6 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import os
+import argparse
 from typing import Dict, List, Any
 
 
@@ -263,11 +262,11 @@ def load_dataset(filepath: str, dataset_name: str) -> List[Dict[str, Any]]:
 
     return data
 
-def create_violin_plots(df: pd.DataFrame):
+def create_violin_plots(df: pd.DataFrame, output_dir: str):
     """Create violin plots like the reference image"""
 
 
-    os.makedirs('dataset_properties', exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
 
     metrics = ["CC", "LOC", "DEP", "NC", "LL"]
     metric_labels = ["CC", "LoC", "DEP", "NC", "LL"]
@@ -362,14 +361,14 @@ def create_violin_plots(df: pd.DataFrame):
     plt.tight_layout()
 
 
-    output_path = 'dataset_properties/violin_plots.png'
+    output_path = os.path.join(output_dir, "violin_plots.png")
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
 
     print(f"\nOK Violin plots saved as {output_path}")
 
 
-    stats_file = 'dataset_properties/detailed_stats.txt'
+    stats_file = os.path.join(output_dir, "detailed_stats.txt")
     with open(stats_file, 'w') as f:
         f.write("DETAILED METRICS STATISTICS\n")
         f.write("=" * 50 + "\n\n")
@@ -393,8 +392,40 @@ def create_violin_plots(df: pd.DataFrame):
 
     return output_path
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Analyze dataset complexity and create visualizations."
+    )
+
+    parser.add_argument(
+        "--cruxeval-file",
+        default="data/CRUXEval/cruxeval.jsonl",
+        help="Path to the CRUXEval JSONL file."
+    )
+
+    parser.add_argument(
+        "--humaneval-file",
+        default="data/HumanEval/HumanEval.jsonl",
+        help="Path to the HumanEval JSONL file."
+    )
+
+    parser.add_argument(
+        "--pythonsaga-file",
+        default="data/PythonSaga/basic185.jsonl",
+        help="Path to the PythonSaga JSONL file."
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        default="dataset_properties",
+        help="Directory where the plot and statistics file will be saved."
+    )
+
+    return parser.parse_args()
+
 def main():
     """Main function"""
+    args = parse_args()
 
     print("=" * 60)
     print("DATASET COMPLEXITY ANALYSIS")
@@ -407,9 +438,9 @@ def main():
     print("\nLoading and analyzing datasets...")
 
     datasets = [
-        ("CRUXEval", "data/CRUXEval/cruxeval.jsonl"),
-        ("HumanEval", "data/HumanEval/HumanEval.jsonl"),
-        ("PythonSaga", "data/PythonSaga/basic185.jsonl")
+        ("CRUXEval", args.cruxeval_file),
+        ("HumanEval", args.humaneval_file),
+        ("PythonSaga", args.pythonsaga_file)
     ]
 
     analyzer = CodeAnalyzer(print_metrics=print_metrics)
@@ -479,7 +510,7 @@ def main():
     print(f"\n{'='*60}")
     print("CREATING VISUALIZATIONS")
     print("=" * 60)
-    create_violin_plots(df)
+    create_violin_plots(df, args.output_dir)
 
     print(f"\n{'='*60}")
     print("ANALYSIS COMPLETE!")
