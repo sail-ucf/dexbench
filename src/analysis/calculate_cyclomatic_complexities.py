@@ -1,10 +1,9 @@
-
-
 import json
 import ast
 import os
 import re
 from typing import Dict, List, Any
+import argparse
 
 def calculate_cyclomatic_complexity(code: str) -> int:
     """
@@ -98,10 +97,8 @@ def read_pythonsaga_program(directory: str) -> str:
     except Exception:
         return ""
 
-def update_json_complexity(json_file: str, backup: bool = True):
-    """
-    Update cyclomatic complexity values in artifacts/programs/runner_programs_with_coverage.json
-    """
+def update_json_complexity(json_file: str, cruxeval_dir: str, runner_programs_dir: str,  backup: bool = True):
+    """Update cyclomatic complexity values in the program metadata JSON."""
 
     print("=" * 60)
     print("UPDATING CYCLOMATIC COMPLEXITY VALUES")
@@ -147,7 +144,7 @@ def update_json_complexity(json_file: str, backup: bool = True):
                 match = re.search(r'CRUXEval/(\d+)', task_id)
                 if match:
                     program_num = match.group(1)
-                    filepath = f"data/CRUXEval/formatted_cruxeval_programs/sample_{program_num}.py"
+                    filepath = os.path.join(cruxeval_dir,f"sample_{program_num}.py")
                     program_code = read_cruxeval_program(filepath)
 
             elif dataset == "HumanEval":
@@ -155,7 +152,7 @@ def update_json_complexity(json_file: str, backup: bool = True):
                 match = re.search(r'HumanEval/(\d+)', task_id)
                 if match:
                     program_num = match.group(1)
-                    directory = f"artifacts/programs/runner_programs/HumanEval_{program_num}"
+                    directory = os.path.join(runner_programs_dir,f"HumanEval_{program_num}")
                     program_code = read_humaneval_program(directory)
 
             elif dataset == "PythonSaga":
@@ -163,7 +160,7 @@ def update_json_complexity(json_file: str, backup: bool = True):
                 match = re.search(r'PythonSaga/(\d+)', task_id)
                 if match:
                     program_num = match.group(1)
-                    directory = f"artifacts/programs/runner_programs/PythonSaga_{program_num}"
+                    directory = os.path.join(runner_programs_dir,f"PythonSaga_{program_num}")
                     program_code = read_pythonsaga_program(directory)
 
 
@@ -276,12 +273,37 @@ def verify_updates(json_file: str):
     except Exception as e:
         print(f"Error during verification: {e}")
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Update cyclomatic complexity values in the program metadata JSON."
+    )
+
+    parser.add_argument(
+        "--json-file",
+        default="artifacts/programs/runner_programs_with_coverage.json",
+        help="Path to the JSON file that will be updated."
+    )
+
+    parser.add_argument(
+        "--cruxeval-dir",
+        default="data/CRUXEval/formatted_cruxeval_programs",
+        help="Directory containing formatted CRUXEval Python programs."
+    )
+
+    parser.add_argument(
+        "--runner-programs-dir",
+        default="artifacts/programs/runner_programs",
+        help="Directory containing HumanEval and PythonSaga runner programs."
+    )
+
+    return parser.parse_args()
+
 def main():
     """Main function"""
-    json_file = "artifacts/programs/runner_programs_with_coverage.json"
-
+    args = parse_args()
+    
     print("Starting cyclomatic complexity update...")
-    print(f"Input JSON file: {json_file}")
+    print(f"Input JSON file: {args.json_file}")
 
 
     response = input("\nThis will update complexity values in the JSON file. Continue? (y/n): ")
@@ -290,15 +312,13 @@ def main():
         return
 
 
-    update_json_complexity(json_file, backup=True)
+    update_json_complexity(args.json_file, args.cruxeval_dir, args.runner_programs_dir, backup=True)
 
-
-    verify_updates(json_file)
+    verify_updates(args.json_file)
 
     print(f"\n{'='*60}")
     print("UPDATE COMPLETE!")
     print("=" * 60)
-    print("\nNote: Original JSON was backed up as 'artifacts/programs/runner_programs_with_coverage.json.backup'")
-
+    print(f"\nNote: Original JSON was backed up as '{args.json_file}.backup'")
 if __name__ == "__main__":
     main()
