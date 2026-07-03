@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 import openai
 import anthropic
+import argparse
 
 
 load_dotenv()
@@ -47,9 +48,6 @@ MODELS_CONFIG = {
     }
 }
 
-COVERAGE_JSON_PATH = Path("artifacts/programs/runner_programs_with_coverage.json")
-BASE_OUTPUT_DIR = Path("API_Model_Outputs")
-
 DRY_RUN = False
 NUM_OUTPUTS_PER_PROMPT = 5
 MAX_PROGRAMS_TO_PROCESS = None
@@ -59,13 +57,12 @@ MAX_WORKERS = len(MODELS_CONFIG)
 INCLUDE_DATASETS = ["CRUXEval", "HumanEval", "PythonSaga"]
 
 
-def load_prompt_templates():
+def load_prompt_templates(prompt_dir: Path):
     """Load reasoning prompt templates"""
-    reasoning_dir = Path("data/prompts/reasoning")
     templates = {}
 
-    coverage_path = reasoning_dir / "ask_predict_coverage.txt"
-    input_path = reasoning_dir / "ask_predict_input.txt"
+    coverage_path = prompt_dir / "ask_predict_coverage.txt"
+    input_path = prompt_dir / "ask_predict_input.txt"
 
     if coverage_path.exists():
         templates["ask_predict_coverage"] = coverage_path.read_text(encoding="utf-8")
@@ -396,7 +393,7 @@ def process_single_api_call(args):
         "response_length": len(response_text)
     }
 
-def process_program_parallel(program, templates, experiment_stats, pbar):
+def process_program_parallel(program, templates, experiment_stats, pbar, base_output_dir: Path):
     """Process a single program with all models in parallel"""
     task_id = program["task_id"]
     code = program["runnable_script"]
@@ -420,7 +417,7 @@ def process_program_parallel(program, templates, experiment_stats, pbar):
             continue
 
 
-        model_dir = BASE_OUTPUT_DIR / model_name
+        model_dir = base_output_dir / model_name
         model_dir.mkdir(exist_ok=True, parents=True)
 
 
@@ -488,8 +485,39 @@ def process_program_parallel(program, templates, experiment_stats, pbar):
 
     return program_stats
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Run the multi-model API coverage experiment."
+    )
+
+    parser.add_argument(
+        "--coverage-json",
+        type=Path,
+        default=Path(
+            "artifacts/programs/runner_programs_with_coverage.json"
+        ),
+        help="Path to the program coverage JSON file."
+    )
+
+    parser.add_argument(
+        "--prompt-dir",
+        type=Path,
+        default=Path("data/prompts/reasoning"),
+        help="Directory containing the reasoning prompt templates."
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("API_Model_Outputs"),
+        help="Directory where API outputs and statistics will be saved."
+    )
+
+    return parser.parse_args()
 
 def main():
+
+    args = parse_args()
 
     start_time = time.time()
     start_time_str = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -508,12 +536,12 @@ def main():
     print(f"Ready models: {ready_models}")
 
 
-    if not COVERAGE_JSON_PATH.exists():
-        print(f"ERROR: File '{COVERAGE_JSON_PATH}' not found.")
+    if not args.coverage_json.exists():
+        print(f"ERROR: File '{args.coverage_json}' not found.")
         exit(1)
 
     try:
-        with open(COVERAGE_JSON_PATH, "r", encoding="utf-8") as f:
+        with open(args.coverage_json, "r", encoding="utf-8") as f:
             coverage_data = json.load(f)
         print(f"Loaded {len(coverage_data)} programs from coverage data")
     except Exception as e:
@@ -529,14 +557,14 @@ def main():
         print(f"Limiting to {len(coverage_data)} programs for testing")
 
 
-    templates = load_prompt_templates()
+    templates = load_prompt_templates(args.prompt_dir)
     if not templates:
         print("No templates loaded. Exiting.")
         exit(1)
 
 
-    BASE_OUTPUT_DIR.mkdir(exist_ok=True)
-
+    output_dir = args.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     total_programs = len(coverage_data)
     total_models = len([m for m in MODELS_CONFIG if MODELS_CONFIG[m]["client"] is not None or DRY_RUN])
@@ -608,7 +636,7 @@ def main():
 
     with tqdm(total=total_api_calls, desc="Overall Progress") as pbar:
         for program in coverage_data:
-            program_stats = process_program_parallel(program, templates, experiment_stats, pbar)
+            program_stats = process_program_parallel(program, templates, experiment_stats, pbar, output_dir)
 
 
     end_time = time.time()
@@ -620,14 +648,13 @@ def main():
     experiment_stats["timing"]["duration_seconds"] = round(duration_seconds, 2)
 
 
-    stats_file = BASE_OUTPUT_DIR / "experiment_statistics.json"
+    stats_file = output_dir / "experiment_statistics.json"
     stats_file.write_text(json.dumps(experiment_stats, indent=2))
-
 
     print("\n" + "="*60)
     print("4-MODEL API EXPERIMENT COMPLETED")
     print("="*60)
-    print(f"Results saved in: {BASE_OUTPUT_DIR}")
+    print(f"Results saved in: {output_dir}")
     print(f"Statistics file: {stats_file}")
     print(f"Timing:")
     print(f"   Start: {start_time_str}")
