@@ -10,16 +10,9 @@ from coverage import Coverage
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import argparse
 
 
-ROOT = Path(".")
-COVERAGE_JSON = ROOT / "artifacts/programs/runner_programs_with_coverage.json"
-BACKUP_BASE = ROOT
-
-
-BACKUP_DIRS = [
-    "API_Model_Outputs"
-]
 
 
 MODELS = ["gpt-5-mini", "gemini-2.5-flash", "grok-4-fast-reasoning", "claude-sonnet-4-sonnet", "AI21-Jamba-Reasoning-3B", "Llama-3.1-Nemotron-Nano-8B-v1"]
@@ -428,15 +421,15 @@ def calculate_pass_at_k_metrics(output_results, k: int):
         "relaxed_overall": relaxed_overall
     }
 
-def process_all_experiments():
+def process_all_experiments(coverage_json: Path, model_outputs_dir: Path):
     """Process all backup experiments and calculate pass@1 and pass@5 metrics"""
 
-    if not COVERAGE_JSON.exists():
-        print(f"Missing {COVERAGE_JSON}")
+    if not coverage_json.exists():
+        print(f"Missing {coverage_json}")
         return []
 
     try:
-        with open(COVERAGE_JSON, "r", encoding="utf-8") as f:
+        with open(coverage_json, "r", encoding="utf-8") as f:
             programs_data = json.load(f)
     except:
         print("Error loading coverage JSON")
@@ -450,8 +443,8 @@ def process_all_experiments():
     results = []
 
 
-    for backup_dir in BACKUP_DIRS:
-        backup_path = BACKUP_BASE / backup_dir
+    for backup_path in [model_outputs_dir]:
+        backup_dir = backup_path.name
         if not backup_path.exists():
             continue
 
@@ -645,7 +638,7 @@ def create_table_visualizations(pass1_df, pass5_df, output_dir):
     plt.savefig(output_dir / 'separate_metrics_tables.png', dpi=300, bbox_inches='tight')
     plt.close()
 
-def generate_report(results):
+def generate_report(results, report_dir: Path):
     """Generate evaluation report with all six metrics"""
 
     if not results:
@@ -655,8 +648,7 @@ def generate_report(results):
     df = pd.DataFrame(results)
 
 
-    report_dir = ROOT / "evaluation_reports"
-    report_dir.mkdir(exist_ok=True)
+    report_dir.mkdir(parents=True, exist_ok=True)
 
 
     df.to_json(report_dir / "detailed_results.json", indent=2, orient="records")
@@ -686,22 +678,53 @@ def generate_report(results):
 
     return df
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Evaluate saved model outputs and generate pass@k reports."
+    )
+
+    parser.add_argument(
+        "--coverage-json",
+        type=Path,
+        default=Path(
+            "artifacts/programs/runner_programs_with_coverage.json"
+        ),
+        help="Path to the program coverage JSON file."
+    )
+
+    parser.add_argument(
+        "--model-outputs-dir",
+        type=Path,
+        default=Path("API_Model_Outputs"),
+        help="Directory containing saved model outputs."
+    )
+
+    parser.add_argument(
+        "--report-dir",
+        type=Path,
+        default=Path("evaluation_reports"),
+        help="Directory where evaluation reports will be saved."
+    )
+
+    return parser.parse_args()
+
 def main():
     """Main execution"""
+    args = parse_args()
     print("Starting comprehensive pass@k evaluation...")
 
-    results = process_all_experiments()
+    results = process_all_experiments(args.coverage_json, args.model_outputs_dir)
 
     if not results:
         print("No results found!")
         return
 
-    df = generate_report(results)
+    df = generate_report(results, args.report_dir)
 
     print("\n" + "=" * 80)
     print("EVALUATION COMPLETE")
     print("=" * 80)
-    print(f"Results saved to: evaluation_reports/")
+    print(f"Results saved to: {args.report_dir}")
     print(f"Total evaluations: {len(results)}")
     print("\nGenerated files:")
     print("  - pass1_metrics.csv (Pass@1 metrics table)")
