@@ -10,16 +10,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-
-
-ROOT = Path(".")
-COVERAGE_JSON_LC = ROOT / "artifacts/programs/runner_programs_with_least_coverage.json"
-COVERAGE_JSON_ORIGINAL = ROOT / "artifacts/programs/runner_programs_with_coverage.json"
-
-
-LC_DIR = ROOT / "API_Model_Outputs_Least_Coverage_grok"
-ORIGINAL_DIR = ROOT / "API_Model_Outputs"
-
+import argparse
 
 MODEL = "grok-4-fast-reasoning"
 
@@ -279,25 +270,25 @@ def evaluate_backward_reasoning_single(output_dir: Path, program_obj, priority_l
 
     return 1.0 if success else 0.0
 
-def load_and_merge_programs():
+def load_and_merge_programs(least_coverage_json: Path, original_coverage_json: Path):
     """Load both JSON files and merge metadata"""
 
-    if not COVERAGE_JSON_LC.exists():
-        print(f"Missing Least Coverage file: {COVERAGE_JSON_LC}")
+    if not least_coverage_json.exists():
+        print(f"Missing Least Coverage file: {least_coverage_json}")
         return []
 
-    if not COVERAGE_JSON_ORIGINAL.exists():
-        print(f"Missing original coverage file: {COVERAGE_JSON_ORIGINAL}")
+    if not original_coverage_json.exists():
+        print(f"Missing original coverage file: {original_coverage_json}")
         return []
 
     try:
 
-        with open(COVERAGE_JSON_LC, "r", encoding="utf-8") as f:
+        with open(least_coverage_json, "r", encoding="utf-8") as f:
             lc_programs = json.load(f)
         print(f"Loaded {len(lc_programs)} Least Coverage programs")
 
 
-        with open(COVERAGE_JSON_ORIGINAL, "r", encoding="utf-8") as f:
+        with open(original_coverage_json, "r", encoding="utf-8") as f:
             original_programs = json.load(f)
         print(f"Loaded {len(original_programs)} original programs")
 
@@ -406,11 +397,11 @@ def evaluate_single_program(program, program_dir: Path, priority_line: int, appr
         "pass5_relaxed_overall": pass5_relaxed_overall,
     }
 
-def evaluate_all_programs():
+def evaluate_all_programs(least_coverage_json: Path, original_coverage_json: Path, least_coverage_outputs_dir: Path, original_outputs_dir: Path):
     """Evaluate all programs for both Least Coverage and Original approaches"""
 
 
-    merged_programs = load_and_merge_programs()
+    merged_programs = load_and_merge_programs(least_coverage_json, original_coverage_json)
     if not merged_programs:
         return None, None
 
@@ -427,8 +418,16 @@ def evaluate_all_programs():
         original_priority_line = int(program["coverage_metadata"]["advanced_priority_line"])
 
 
-        lc_program_dir = LC_DIR / MODEL / dir_name
-        original_program_dir = ORIGINAL_DIR / MODEL / dir_name
+        lc_program_dir = (
+            least_coverage_outputs_dir
+            / MODEL
+            / dir_name
+        )
+        original_program_dir = (
+            original_outputs_dir
+            / MODEL
+            / dir_name
+        )
 
         if not lc_program_dir.exists():
             print(f"Least Coverage directory not found for {task_id}")
@@ -709,32 +708,99 @@ def create_summary_tables(lc_df, original_df, output_dir):
 
     return pass1_df, pass5_df
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Compare Grok Least Coverage evaluation results against "
+            "the original Grok evaluation results."
+        )
+    )
+
+    parser.add_argument(
+        "--least-coverage-json",
+        type=Path,
+        default=Path(
+            "artifacts/programs/runner_programs_with_least_coverage.json"
+        ),
+        help="Path to the Least Coverage program JSON file."
+    )
+
+    parser.add_argument(
+        "--original-coverage-json",
+        type=Path,
+        default=Path(
+            "artifacts/programs/runner_programs_with_coverage.json"
+        ),
+        help="Path to the original program coverage JSON file."
+    )
+
+    parser.add_argument(
+        "--least-coverage-outputs-dir",
+        type=Path,
+        default=Path("API_Model_Outputs_Least_Coverage_grok"),
+        help="Directory containing Grok Least Coverage outputs."
+    )
+
+    parser.add_argument(
+        "--original-outputs-dir",
+        type=Path,
+        default=Path("API_Model_Outputs"),
+        help="Directory containing original model outputs."
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(
+            "least_coverage_evaluation_reports_grok-4-fast-reasoning"
+        ),
+        help="Directory where Grok evaluation reports will be saved."
+    )
+
+    return parser.parse_args()
+
 def main():
     """Main execution"""
+    args = parse_args()
+
     print("=" * 80)
     print("COMPREHENSIVE LEAST COVERAGE vs ORIGINAL EVALUATION - GROK")
     print("=" * 80)
     print(f"Model: {MODEL}")
-    print(f"Least Coverage Directory: {LC_DIR}")
-    print(f"Original Directory: {ORIGINAL_DIR}/{MODEL}")
+    print(
+        f"Least Coverage Directory: "
+        f"{args.least_coverage_outputs_dir}"
+    )
+    print(
+        f"Original Directory: "
+        f"{args.original_outputs_dir / MODEL}"
+    )
     print("\nNOTE: Using forward reasoning from Original experiment")
     print("   for Least Coverage approach (same as RAP experiment)")
     print("=" * 80)
 
-
-    if not LC_DIR.exists():
-        print(f"Least Coverage directory not found: {LC_DIR}")
+    if not args.least_coverage_outputs_dir.exists():
+        print(
+            "Least Coverage directory not found: "
+            f"{args.least_coverage_outputs_dir}"
+        )
         print("   Run the Least Coverage grok experiment first!")
         return
 
-    if not (ORIGINAL_DIR / MODEL).exists():
-        print(f"Original directory not found: {ORIGINAL_DIR}/{MODEL}")
+    original_model_dir = args.original_outputs_dir / MODEL
+    if not original_model_dir.exists():
+        print(f"Original directory not found: {original_model_dir}")
         print("   Make sure you have original grok results!")
         return
 
 
-    lc_df, original_df = evaluate_all_programs()
-
+    lc_df, original_df = evaluate_all_programs(
+        args.least_coverage_json,
+        args.original_coverage_json,
+        args.least_coverage_outputs_dir,
+        args.original_outputs_dir
+    )
+    
     if lc_df is None or original_df is None:
         print("No results to process!")
         return
@@ -743,8 +809,8 @@ def main():
     print(f"Evaluated {len(original_df)} programs for Original approach")
 
 
-    output_dir = ROOT / f"least_coverage_evaluation_reports_{MODEL}"
-    output_dir.mkdir(exist_ok=True)
+    output_dir = args.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
 
 
     lc_df.to_csv(output_dir / f"{MODEL}_least_coverage_detailed_results.csv", index=False)
