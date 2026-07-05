@@ -10,16 +10,7 @@ from coverage import Coverage
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
-
-ROOT = Path(".")
-COVERAGE_JSON_RAP = ROOT / "artifacts/programs/runner_programs_with_coverage_rap.json"
-COVERAGE_JSON_ORIGINAL = ROOT / "artifacts/programs/runner_programs_with_coverage.json"
-
-
-RAP_DIR = ROOT / "API_Model_Outputs_RAP"
-ORIGINAL_DIR = ROOT / "API_Model_Outputs"
-
+import argparse
 
 MODEL = "gpt-5-mini"
 
@@ -271,25 +262,25 @@ def evaluate_backward_reasoning_single(output_dir: Path, program_obj, priority_l
 
     return 1.0 if success else 0.0
 
-def load_and_merge_programs():
+def load_and_merge_programs(rap_coverage_json: Path, original_coverage_json: Path):
     """Load both JSON files and merge metadata"""
 
-    if not COVERAGE_JSON_RAP.exists():
-        print(f"Missing RAP coverage file: {COVERAGE_JSON_RAP}")
+    if not rap_coverage_json.exists():
+        print(f"Missing RAP coverage file: {rap_coverage_json}")
         return []
 
-    if not COVERAGE_JSON_ORIGINAL.exists():
-        print(f"Missing original coverage file: {COVERAGE_JSON_ORIGINAL}")
+    if not original_coverage_json.exists():
+        print(f"Missing original coverage file: {original_coverage_json}")
         return []
 
     try:
 
-        with open(COVERAGE_JSON_RAP, "r", encoding="utf-8") as f:
+        with open(rap_coverage_json, "r", encoding="utf-8") as f:
             rap_programs = json.load(f)
         print(f"Loaded {len(rap_programs)} RAP programs")
 
 
-        with open(COVERAGE_JSON_ORIGINAL, "r", encoding="utf-8") as f:
+        with open(original_coverage_json, "r", encoding="utf-8") as f:
             original_programs = json.load(f)
         print(f"Loaded {len(original_programs)} original programs")
 
@@ -382,11 +373,14 @@ def evaluate_single_program(program, program_dir: Path, priority_line: int):
         "pass5_relaxed_overall": pass5_relaxed_overall,
     }
 
-def evaluate_all_programs():
+def evaluate_all_programs(rap_coverage_json: Path, original_coverage_json: Path, rap_outputs_dir: Path, original_outputs_dir: Path):
     """Evaluate all programs for both RAP and Original approaches"""
 
 
-    merged_programs = load_and_merge_programs()
+    merged_programs = load_and_merge_programs(
+        rap_coverage_json,
+        original_coverage_json
+    )
     if not merged_programs:
         return None, None
 
@@ -403,8 +397,16 @@ def evaluate_all_programs():
         original_priority_line = int(program["coverage_metadata"]["advanced_priority_line"])
 
 
-        rap_program_dir = RAP_DIR / MODEL / dir_name
-        original_program_dir = ORIGINAL_DIR / MODEL / dir_name
+        rap_program_dir = (
+            rap_outputs_dir
+            / MODEL
+            / dir_name
+        )
+        original_program_dir = (
+            original_outputs_dir
+            / MODEL
+            / dir_name
+        )
 
         if not rap_program_dir.exists():
             print(f"RAP directory not found for {task_id}")
@@ -678,17 +680,72 @@ def create_summary_tables(rap_df, original_df, output_dir):
 
     return pass1_df, pass5_df
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Compare RAP evaluation results against "
+            "the original evaluation results."
+        )
+    )
+
+    parser.add_argument(
+        "--rap-coverage-json",
+        type=Path,
+        default=Path(
+            "artifacts/programs/runner_programs_with_coverage_rap.json"
+        ),
+        help="Path to the RAP program coverage JSON file."
+    )
+
+    parser.add_argument(
+        "--original-coverage-json",
+        type=Path,
+        default=Path(
+            "artifacts/programs/runner_programs_with_coverage.json"
+        ),
+        help="Path to the original program coverage JSON file."
+    )
+
+    parser.add_argument(
+        "--rap-outputs-dir",
+        type=Path,
+        default=Path("API_Model_Outputs_RAP"),
+        help="Directory containing RAP model outputs."
+    )
+
+    parser.add_argument(
+        "--original-outputs-dir",
+        type=Path,
+        default=Path("API_Model_Outputs"),
+        help="Directory containing original model outputs."
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("rap_evaluation_reports"),
+        help="Directory where RAP evaluation reports will be saved."
+    )
+
+    return parser.parse_args()
+
 def main():
     """Main execution"""
+    args = parse_args()
+
     print("=" * 80)
     print("COMPREHENSIVE RAP vs ORIGINAL EVALUATION")
     print("=" * 80)
     print(f"Model: {MODEL}")
-    print(f"RAP Directory: {RAP_DIR}")
-    print(f"Original Directory: {ORIGINAL_DIR}")
+    print(f"RAP Directory: {args.rap_outputs_dir}")
+    print(f"Original Directory: {args.original_outputs_dir}")
 
-
-    rap_df, original_df = evaluate_all_programs()
+    rap_df, original_df = evaluate_all_programs(
+        args.rap_coverage_json,
+        args.original_coverage_json,
+        args.rap_outputs_dir,
+        args.original_outputs_dir
+    )
 
     if rap_df is None or original_df is None:
         print("No results to process!")
@@ -698,8 +755,8 @@ def main():
     print(f"Evaluated {len(original_df)} programs for Original approach")
 
 
-    output_dir = ROOT / "rap_evaluation_reports"
-    output_dir.mkdir(exist_ok=True)
+    output_dir = args.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
 
 
     rap_df.to_csv(output_dir / "rap_detailed_results.csv", index=False)
