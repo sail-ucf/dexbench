@@ -11,16 +11,10 @@ from coverage import Coverage
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import argparse
 
 
-ROOT = Path(".")
-COVERAGE_JSON_ABLATION = ROOT / "data" / "programs" / "ablation_study_programs_with_coverage.json"
-COVERAGE_JSON_ORIGINAL = ROOT / "data" / "programs" / "runner_programs_with_coverage.json"
 INPUT_PLACEHOLDER = "??"
-
-ABLATION_DIR = ROOT / "API_Model_Outputs_Ablation_grok"
-ORIGINAL_DIR = ROOT / "API_Model_Outputs"
-
 MODEL = "grok-4-fast-reasoning"
 
 
@@ -298,19 +292,19 @@ def normalize_task_id(dir_name):
 
     return dir_name
 
-def copy_forward_reasoning_results():
+def copy_forward_reasoning_results(original_outputs_dir: Path, ablation_outputs_dir: Path):
     """Copy forward reasoning results from original experiment to grok ablation directory"""
     print("Copying forward reasoning results from original experiment to grok directory...")
 
     copied_count = 0
 
 
-    for original_program_dir in (ORIGINAL_DIR / "grok-4-fast-reasoning").iterdir():
+    for original_program_dir in (original_outputs_dir / MODEL).iterdir():
         if not original_program_dir.is_dir():
             continue
 
         task_id = normalize_task_id(original_program_dir.name)
-        ablation_program_dir = ABLATION_DIR / MODEL / original_program_dir.name
+        ablation_program_dir = ablation_outputs_dir / MODEL / original_program_dir.name
 
         if not ablation_program_dir.exists():
             print(f"    Grok ablation directory not found for {task_id}, skipping")
@@ -429,14 +423,14 @@ def calculate_pass_at_k_metrics(output_results, k: int):
         "relaxed_overall": relaxed_overall
     }
 
-def get_ablation_programs():
+def get_ablation_programs(ablation_coverage_json: Path):
     """Get all ablation study programs"""
-    if not COVERAGE_JSON_ABLATION.exists():
-        print(f"Missing {COVERAGE_JSON_ABLATION}")
+    if not ablation_coverage_json.exists():
+        print(f"Missing {ablation_coverage_json}")
         return []
 
     try:
-        with open(COVERAGE_JSON_ABLATION, "r", encoding="utf-8") as f:
+        with open(ablation_coverage_json, "r", encoding="utf-8") as f:
             ablation_programs = json.load(f)
         print(f"Loaded {len(ablation_programs)} ablation programs")
         return ablation_programs
@@ -444,11 +438,11 @@ def get_ablation_programs():
         print(f"Error loading ablation JSON: {e}")
         return []
 
-def process_ablation_experiments():
+def process_ablation_experiments(ablation_coverage_json: Path, ablation_outputs_dir: Path):
     """Process ablation study experiments for all programs with grok"""
 
 
-    ablation_programs = get_ablation_programs()
+    ablation_programs = get_ablation_programs(ablation_coverage_json)
     if not ablation_programs:
         return []
 
@@ -463,7 +457,7 @@ def process_ablation_experiments():
         print(f"Inspecting Processing program: {task_id}")
 
 
-        ablation_program_dir = ABLATION_DIR / MODEL / dir_name
+        ablation_program_dir = ablation_outputs_dir / MODEL / dir_name
 
         if not ablation_program_dir.exists():
             print(f"   Grok ablation directory not found: {ablation_program_dir}")
@@ -651,7 +645,7 @@ def create_table_visualizations(pass1_df, pass5_df, output_dir):
     plt.savefig(output_dir / 'grok_ablation_metrics_tables.png', dpi=300, bbox_inches='tight')
     plt.close()
 
-def generate_ablation_report(results):
+def generate_ablation_report(results, report_dir: Path):
     """Generate grok ablation study report"""
 
     if not results:
@@ -660,9 +654,7 @@ def generate_ablation_report(results):
 
     df = pd.DataFrame(results)
 
-
-    report_dir = ROOT / "grok_ablation_evaluation_reports"
-    report_dir.mkdir(exist_ok=True)
+    report_dir.mkdir(parents=True, exist_ok=True)
 
 
     df.to_json(report_dir / "grok_ablation_detailed_results.json", indent=2, orient="records")
@@ -685,26 +677,65 @@ def generate_ablation_report(results):
 
     return df
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Evaluate Grok ablation-study model outputs."
+    )
+
+    parser.add_argument(
+        "--ablation-coverage-json",
+        type=Path,
+        default=Path(
+            "src/evaluation/data/programs/"
+            "ablation_study_programs_with_coverage.json"
+        ),
+        help="Path to the ablation-study coverage JSON file."
+    )
+
+    parser.add_argument(
+        "--original-outputs-dir",
+        type=Path,
+        default=Path("API_Model_Outputs"),
+        help="Directory containing the original Grok outputs."
+    )
+
+    parser.add_argument(
+        "--ablation-outputs-dir",
+        type=Path,
+        default=Path("API_Model_Outputs_Ablation_grok"),
+        help="Directory containing the Grok ablation outputs."
+    )
+
+    parser.add_argument(
+        "--report-dir",
+        type=Path,
+        default=Path("grok_ablation_evaluation_reports"),
+        help="Directory where ablation evaluation reports will be saved."
+    )
+
+    return parser.parse_args()
+
 def main():
     """Main execution"""
+    args = parse_args()
     print("Starting Grok-4-Fast-Reasoning Ablation Study Evaluation...")
 
 
-    copy_forward_reasoning_results()
+    copy_forward_reasoning_results(args.original_outputs_dir, args.ablation_outputs_dir)
 
 
-    results = process_ablation_experiments()
+    results = process_ablation_experiments(args.ablation_coverage_json, args.ablation_outputs_dir)
 
     if not results:
         print("No results found!")
         return
 
-    df = generate_ablation_report(results)
+    df = generate_ablation_report(results, args.report_dir)
 
     print("\n" + "=" * 80)
     print("GROK-4-FAST-REASONING ABLATION STUDY EVALUATION COMPLETE")
     print("=" * 80)
-    print(f"Results saved to: grok_ablation_evaluation_reports/")
+    print(f"Results saved to: {args.report_dir}")
     print(f"Total evaluations: {len(results)}")
     print("\nGenerated files:")
     print("  - grok_ablation_pass1_metrics.csv (Grok Pass@1 metrics table)")
