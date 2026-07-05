@@ -15,12 +15,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import sys
+import argparse
 
-
-ROOT = Path(".")
-CRISPE_DIR = ROOT / "API_Model_Outputs_CRISPE_no_examplar"
-ORIGINAL_DIR = ROOT / "API_Model_Outputs"
-COVERAGE_JSON = ROOT / "artifacts/programs/runner_programs_with_coverage.json"
 MODEL = "gpt-5-mini"
 
 
@@ -254,11 +250,11 @@ def evaluate_backward_reasoning(runnable_src: str, pred_input: str, priority_lin
     return 1.0 if success else 0.0
 
 
-def copy_backward_results():
+def copy_backward_results(original_outputs_dir: Path, crispe_outputs_dir: Path):
     """Copy backward reasoning results from original study to CRISPE directories"""
     print("Syncing Backward Reasoning results...")
-    source_base = ORIGINAL_DIR / MODEL
-    dest_base = CRISPE_DIR / MODEL
+    source_base = original_outputs_dir / MODEL
+    dest_base = crispe_outputs_dir / MODEL
 
     if not source_base.exists():
         print(f"Source directory not found: {source_base}")
@@ -326,14 +322,14 @@ def normalize_program_id(task_id: str, dataset: str):
     else:
         return task_id.replace("/", "_")
 
-def load_program_data():
+def load_program_data(coverage_json: Path):
     """Load program data and create lookup dictionary with normalized IDs"""
-    if not COVERAGE_JSON.exists():
-        print(f"Coverage JSON not found: {COVERAGE_JSON}")
+    if not coverage_json.exists():
+        print(f"Coverage JSON not found: {coverage_json}")
         return {}
 
     try:
-        with open(COVERAGE_JSON, 'r') as f:
+        with open(coverage_json, 'r', encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
         print(f"Error loading JSON: {e}")
@@ -442,29 +438,69 @@ def create_sensitivity_analysis_table(df_p1, df_p5, output_file):
     plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor='white')
     print(f"Visualization saved to {output_file}")
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Evaluate CRISPE forward reasoning with original "
+            "backward reasoning."
+        )
+    )
+
+    parser.add_argument(
+        "--coverage-json",
+        type=Path,
+        default=Path(
+            "artifacts/programs/runner_programs_with_coverage.json"
+        ),
+        help="Path to the program coverage JSON file."
+    )
+
+    parser.add_argument(
+        "--crispe-outputs-dir",
+        type=Path,
+        default=Path("API_Model_Outputs_CRISPE_no_examplar"),
+        help="Directory containing the CRISPE model outputs."
+    )
+
+    parser.add_argument(
+        "--original-outputs-dir",
+        type=Path,
+        default=Path("API_Model_Outputs"),
+        help="Directory containing the original backward-reasoning outputs."
+    )
+
+    parser.add_argument(
+        "--tables-dir",
+        type=Path,
+        default=Path("tables_g-t-5-mini_no_examplar"),
+        help="Directory where evaluation tables and reports will be saved."
+    )
+
+    return parser.parse_args()
 
 def main():
+    args = parse_args()
+
     print("=" * 60)
     print("SENSITIVITY ANALYSIS: CRISPE Forward + Original Backward")
     print("=" * 60)
 
 
-    tables_dir = ROOT / "tables_g-t-5-mini_no_examplar"
-    tables_dir.mkdir(exist_ok=True)
+    tables_dir = args.tables_dir
+    tables_dir.mkdir(parents=True, exist_ok=True)
 
-
-    copied = copy_backward_results()
+    copied = copy_backward_results(args.original_outputs_dir, args.crispe_outputs_dir)
     if copied == 0:
         print("No backward results copied. Check if source directory exists.")
 
 
-    prog_lookup = load_program_data()
+    prog_lookup = load_program_data(args.coverage_json)
     if not prog_lookup:
         print("No program data loaded. Exiting.")
         return
 
 
-    model_dir = CRISPE_DIR / MODEL
+    model_dir = args.crispe_outputs_dir / MODEL
     if not model_dir.exists():
         print(f"CRISPE directory not found: {model_dir}")
         return
