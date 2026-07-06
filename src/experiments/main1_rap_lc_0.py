@@ -1,5 +1,7 @@
 import pandas as pd
 import re
+import argparse
+from pathlib import Path
 
 def load_csv(file_path):
     """Load CSV file, handling potential parsing issues"""
@@ -61,11 +63,11 @@ def normalize_task_id(task_id):
 
     return task_id
 
-def find_zero_backward_tasks():
+def find_zero_backward_tasks(main_results_csv: Path, rap_results_csv: Path, least_coverage_results_csv: Path):
 
-    main_experiment = load_csv('evaluation_reports_main/detailed_results.csv')
-    rap_experiment = load_csv('rap_evaluation_reports_grok/rap_detailed_results.csv')
-    least_coverage_experiment = load_csv('least_coverage_evaluation_reports_grok-4-fast-reasoning/grok-4-fast-reasoning_least_coverage_detailed_results.csv')
+    main_experiment = load_csv(main_results_csv)
+    rap_experiment = load_csv(rap_results_csv)
+    least_coverage_experiment = load_csv(least_coverage_results_csv)
 
     if main_experiment is None or rap_experiment is None or least_coverage_experiment is None:
         print("Error loading one or more files. Please check the file paths.")
@@ -211,5 +213,47 @@ def find_zero_backward_tasks():
 
     return results
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Find tasks where Grok succeeds in the main experiment "
+            "but fails in RAP or least-coverage experiments."
+        )
+    )
+
+    parser.add_argument(
+        "--main-results-csv",
+        type=Path,
+        default=Path("evaluation_reports_main/detailed_results.csv"),
+        help="Path to the main experiment detailed results CSV."
+    )
+
+    parser.add_argument(
+        "--rap-results-csv",
+        type=Path,
+        default=Path(
+            "rap_evaluation_reports_grok/"
+            "rap_detailed_results.csv"
+        ),
+        help="Path to the RAP detailed results CSV."
+    )
+
+    parser.add_argument(
+        "--least-coverage-results-csv",
+        type=Path,
+        default=Path(
+            "least_coverage_evaluation_reports_grok-4-fast-reasoning/"
+            "grok-4-fast-reasoning_least_coverage_detailed_results.csv"
+        ),
+        help="Path to the least-coverage detailed results CSV."
+    )
+
+    return parser.parse_args()
+
 if __name__ == "__main__":
-    results = find_zero_backward_tasks()
+    args = parse_args()
+    results = find_zero_backward_tasks(
+        args.main_results_csv,
+        args.rap_results_csv,
+        args.least_coverage_results_csv
+    )
