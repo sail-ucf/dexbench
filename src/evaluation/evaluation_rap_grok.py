@@ -10,15 +10,7 @@ from coverage import Coverage
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-
-
-ROOT = Path(".")
-COVERAGE_JSON_RAP = ROOT / "artifacts/programs/runner_programs_with_coverage_rap.json"
-COVERAGE_JSON_ORIGINAL = ROOT / "artifacts/programs/runner_programs_with_coverage.json"
-
-
-RAP_DIR = ROOT / "API_Model_Outputs_RAP_grok"
-ORIGINAL_DIR = ROOT / "API_Model_Outputs"
+import argparse
 
 
 MODEL = "grok-4-fast-reasoning"
@@ -439,14 +431,14 @@ def calculate_pass_at_k_metrics(output_results, k: int):
         "relaxed_overall": relaxed_overall
     }
 
-def get_rap_programs():
+def get_rap_programs(rap_coverage_json: Path):
     """Get the list of 87 programs that have RAP support"""
-    if not COVERAGE_JSON_RAP.exists():
-        print(f"Missing {COVERAGE_JSON_RAP}")
+    if not rap_coverage_json.exists():
+        print(f"Missing {rap_coverage_json}")
         return []
 
     try:
-        with open(COVERAGE_JSON_RAP, "r", encoding="utf-8") as f:
+        with open(rap_coverage_json, "r", encoding="utf-8") as f:
             rap_programs = json.load(f)
         print(f"Loaded {len(rap_programs)} RAP programs")
         return rap_programs
@@ -454,14 +446,14 @@ def get_rap_programs():
         print(f"Error loading RAP JSON: {e}")
         return []
 
-def get_original_coverage_lookup():
+def get_original_coverage_lookup(original_coverage_json: Path):
     """Create lookup dictionary for original coverage data"""
-    if not COVERAGE_JSON_ORIGINAL.exists():
-        print(f"Missing {COVERAGE_JSON_ORIGINAL}")
+    if not original_coverage_json.exists():
+        print(f"Missing {original_coverage_json}")
         return {}
 
     try:
-        with open(COVERAGE_JSON_ORIGINAL, "r", encoding="utf-8") as f:
+        with open(original_coverage_json, "r", encoding="utf-8") as f:
             original_programs = json.load(f)
         coverage_lookup = {prog["task_id"]: prog for prog in original_programs}
         print(f"Loaded {len(coverage_lookup)} original programs")
@@ -470,16 +462,16 @@ def get_original_coverage_lookup():
         print(f"Error loading original JSON: {e}")
         return {}
 
-def process_comparison_experiments():
+def process_comparison_experiments(rap_coverage_json: Path, original_coverage_json: Path, rap_outputs_dir: Path, original_outputs_dir: Path):
     """Process both RAP and Original experiments for the same 87 programs"""
 
 
-    rap_programs = get_rap_programs()
+    rap_programs = get_rap_programs(rap_coverage_json)
     if not rap_programs:
         return []
 
 
-    original_lookup = get_original_coverage_lookup()
+    original_lookup = get_original_coverage_lookup(original_coverage_json)
     if not original_lookup:
         return []
 
@@ -499,8 +491,8 @@ def process_comparison_experiments():
             continue
 
 
-        rap_program_dir = RAP_DIR / MODEL / dir_name
-        original_program_dir = ORIGINAL_DIR / MODEL / dir_name
+        rap_program_dir = rap_outputs_dir / MODEL / dir_name
+        original_program_dir = original_outputs_dir / MODEL / dir_name
 
         if not rap_program_dir.exists():
             print(f"   RAP directory not found: {rap_program_dir}")
@@ -826,7 +818,7 @@ def create_table_visualizations(rap_pass1_df, rap_pass5_df, original_pass1_df, o
     plt.savefig(output_dir / 'grok_rap_original_metrics_tables.png', dpi=300, bbox_inches='tight')
     plt.close()
 
-def generate_comparison_report(results):
+def generate_comparison_report(results, output_dir: Path):
     """Generate comparison report with dataset-separated tables"""
 
     if not results:
@@ -836,8 +828,8 @@ def generate_comparison_report(results):
     df = pd.DataFrame(results)
 
 
-    report_dir = ROOT / "grok_rap_comparison_reports"
-    report_dir.mkdir(exist_ok=True)
+    report_dir = output_dir
+    report_dir.mkdir(parents=True, exist_ok=True)
 
 
     df.to_json(report_dir / "grok_comparison_detailed_results.json", indent=2, orient="records")
@@ -874,22 +866,73 @@ def generate_comparison_report(results):
 
     return df
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Compare Grok RAP evaluation results against "
+            "the original Grok evaluation results."
+        )
+    )
+
+    parser.add_argument(
+        "--rap-coverage-json",
+        type=Path,
+        default=Path(
+            "artifacts/programs/runner_programs_with_coverage_rap.json"
+        ),
+        help="Path to the RAP program coverage JSON file."
+    )
+
+    parser.add_argument(
+        "--original-coverage-json",
+        type=Path,
+        default=Path(
+            "artifacts/programs/runner_programs_with_coverage.json"
+        ),
+        help="Path to the original program coverage JSON file."
+    )
+
+    parser.add_argument(
+        "--rap-outputs-dir",
+        type=Path,
+        default=Path("API_Model_Outputs_RAP_grok"),
+        help="Directory containing Grok RAP outputs."
+    )
+
+    parser.add_argument(
+        "--original-outputs-dir",
+        type=Path,
+        default=Path("API_Model_Outputs"),
+        help="Directory containing original Grok outputs."
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("grok_rap_comparison_reports"),
+        help="Directory where Grok RAP comparison reports will be saved."
+    )
+
+    return parser.parse_args()
+
 def main():
     """Main execution"""
+    args = parse_args()
+
     print("Starting Grok-4-Fast-Reasoning RAP vs Original comparison evaluation...")
 
-    results = process_comparison_experiments()
+    results = process_comparison_experiments(args.rap_coverage_json, args.original_coverage_json, args.rap_outputs_dir, args.original_outputs_dir)
 
     if not results:
         print("No results found!")
         return
 
-    df = generate_comparison_report(results)
+    df = generate_comparison_report(results, args.output_dir)
 
     print("\n" + "=" * 80)
     print("GROK RAP COMPARISON EVALUATION COMPLETE")
     print("=" * 80)
-    print(f"Results saved to: grok_rap_comparison_reports/")
+    print(f"Results saved to: {args.output_dir}/")
     print(f"Total comparisons: {len(results)}")
     print("\nGenerated files:")
     print("  - grok_rap_pass1_metrics_by_dataset.csv (RAP Pass@1 by dataset)")
