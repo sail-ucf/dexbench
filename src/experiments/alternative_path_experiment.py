@@ -6,6 +6,7 @@ from pathlib import Path
 from tqdm import tqdm
 from dotenv import load_dotenv
 import openai
+import argparse
 
 
 load_dotenv()
@@ -22,8 +23,6 @@ MODELS_CONFIG = {
     }
 }
 
-COVERAGE_JSON_PATH = Path("artifacts/programs/runner_programs_with_coverage_rap.json")
-BASE_OUTPUT_DIR = Path("API_Model_Outputs_RAP")
 
 
 DRY_RUN = False
@@ -36,10 +35,8 @@ MAX_WORKERS = 20
 INCLUDE_DATASETS = ["PythonSaga"]
 
 
-def load_backward_reasoning_template():
+def load_backward_reasoning_template(template_path: Path):
     """Load only backward reasoning prompt template"""
-    reasoning_dir = Path("data/prompts/reasoning")
-    template_path = reasoning_dir / "ask_predict_coverage.txt"
 
     if template_path.exists():
         template = template_path.read_text(encoding="utf-8")
@@ -169,7 +166,7 @@ def process_single_api_call(args):
         "usage_info": usage_info
     }
 
-def process_program_batch(programs_batch, template, experiment_stats, pbar):
+def process_program_batch(programs_batch, template, experiment_stats, pbar, base_output_dir: Path):
     """Process a batch of programs in parallel"""
     api_call_args = []
 
@@ -179,18 +176,28 @@ def process_program_batch(programs_batch, template, experiment_stats, pbar):
         priority_line = program["coverage_metadata"]["priority_line"]
 
         model_name = "gpt-5-mini"
-        model_dir = BASE_OUTPUT_DIR / model_name
+        model_dir = base_output_dir / model_name
         model_dir.mkdir(exist_ok=True, parents=True)
 
 
         for output_num in range(1, NUM_OUTPUTS_PER_PROMPT + 1):
-            output_dir = model_dir / task_id.replace("/", "_") / f"output_{output_num}"
-            output_dir.mkdir(exist_ok=True, parents=True)
+            program_output_dir = (
+                model_dir
+                / task_id.replace("/", "_")
+                / f"output_{output_num}"
+            )
+            program_output_dir.mkdir(exist_ok=True, parents=True)
 
             formatted_prompt = format_prompt(template, code, priority_line)
-            (output_dir / "backward_reasoning_prompt.txt").write_text(formatted_prompt)
+            (program_output_dir / "backward_reasoning_prompt.txt").write_text(formatted_prompt)
 
-            api_call_args.append((model_name, formatted_prompt, output_dir, "backward_reasoning", output_num))
+            api_call_args.append((
+                model_name,
+                formatted_prompt,
+                program_output_dir,
+                "backward_reasoning",
+                output_num
+            ))
 
     print(f"Processing batch of {len(programs_batch)} programs -> {len(api_call_args)} API calls")
 
@@ -229,26 +236,71 @@ def process_program_batch(programs_batch, template, experiment_stats, pbar):
                     experiment_stats["failed_calls"] += 1
                 pbar.update(1)
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Run the RAP alternative path experiment."
+    )
+    
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=DRY_RUN,
+        help="Write dry-run responses instead of making real API calls."
+    )
+
+    parser.add_argument(
+        "--coverage-json",
+        type=Path,
+        default=Path(
+            "artifacts/programs/"
+            "runner_programs_with_coverage_rap.json"
+        ),
+        help="Path to the RAP coverage JSON file."
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("API_Model_Outputs_RAP"),
+        help="Directory where experiment outputs will be saved."
+    )
+
+    parser.add_argument(
+        "--prompt-template",
+        type=Path,
+        default=Path(
+            "data/prompts/reasoning/"
+            "ask_predict_coverage.txt"
+        ),
+        help="Path to the backward-reasoning prompt template."
+    )
+
+    return parser.parse_args()
 
 def main():
+    args = parse_args()
+    global DRY_RUN
+    DRY_RUN = args.dry_run
+    
     start_time = time.time()
 
     print("=== RAP Alternative Path Experiment ===")
     print(f"Model: gpt-5-mini")
-    print(f"Coverage data: {COVERAGE_JSON_PATH}")
+    print(f"Coverage data: {args.coverage_json}")
     print(f"Outputs per prompt: {NUM_OUTPUTS_PER_PROMPT}")
     print(f"Parallel workers: {MAX_WORKERS}")
 
 
-    initialize_clients()
+    if not DRY_RUN:
+        initialize_clients()
 
 
-    if not COVERAGE_JSON_PATH.exists():
-        print(f"ERROR: RAP coverage file '{COVERAGE_JSON_PATH}' not found.")
+    if not args.coverage_json.exists():
+        print(f"ERROR: RAP coverage file '{args.coverage_json}' not found.")
         exit(1)
 
     try:
-        with open(COVERAGE_JSON_PATH, "r", encoding="utf-8") as f:
+        with open(args.coverage_json, "r", encoding="utf-8") as f:
             coverage_data = json.load(f)
         print(f"Loaded {len(coverage_data)} programs from RAP coverage data")
     except Exception as e:
@@ -264,13 +316,13 @@ def main():
         print(f"Limiting to {len(coverage_data)} programs for testing")
 
 
-    template = load_backward_reasoning_template()
+    template = load_backward_reasoning_template(args.prompt_template)
     if not template:
         print("No template loaded. Exiting.")
         exit(1)
 
 
-    BASE_OUTPUT_DIR.mkdir(exist_ok=True)
+    args.output_dir.mkdir(exist_ok=True, parents=True)
 
 
     total_programs = len(coverage_data)
@@ -310,18 +362,18 @@ def main():
     with tqdm(total=total_api_calls, desc="API Calls") as pbar:
         for i in range(0, total_programs, BATCH_SIZE):
             batch = coverage_data[i:i + BATCH_SIZE]
-            process_program_batch(batch, template, experiment_stats, pbar)
+            process_program_batch(batch, template, experiment_stats, pbar, args.output_dir)
             print(f"Completed batch {i//BATCH_SIZE + 1}/{(total_programs + BATCH_SIZE - 1)//BATCH_SIZE}")
 
 
-    stats_file = BASE_OUTPUT_DIR / "rap_experiment_stats.json"
+    stats_file = args.output_dir / "rap_experiment_stats.json"
     stats_file.write_text(json.dumps(experiment_stats, indent=2))
 
 
     duration = time.time() - start_time
     print(f"\nRAP EXPERIMENT COMPLETED")
     print(f"Duration: {duration:.2f}s ({duration/60:.2f}m)")
-    print(f"Results: {BASE_OUTPUT_DIR}")
+    print(f"Results: {args.output_dir}")
 
     if not DRY_RUN:
         print(f"Total Cost: ${experiment_stats['total_costs']['estimated_cost']:.2f}")
