@@ -271,17 +271,52 @@ def process_pythonsaga_item(item):
 import subprocess
 import shutil
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generate runnable scripts from HumanEval and PythonSaga datasets."
+    )
+
+    parser.add_argument(
+        "--human-eval",
+        type=Path,
+        required=True,
+        help="Path to HumanEval.jsonl."
+    )
+
+    parser.add_argument(
+        "--pythonsaga",
+        type=Path,
+        required=True,
+        help="Path to PythonSaga JSONL file."
+    )
+
+    parser.add_argument(
+        "-o",
+        "--output-json",
+        type=Path,
+        default=Path("artifacts/programs/runner_programs.json"),
+        help="Output JSON file name for complex programs."
+    )
+
+    parser.add_argument(
+        "-d",
+        "--output-dir",
+        type=Path,
+        default=Path("artifacts/programs"),
+        help="Main output directory for all program files."
+    )
+
+    return parser.parse_args()
+
+
 def main():
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s"
+    )
 
-    parser = argparse.ArgumentParser(description="Generate runnable scripts from HumanEval and PythonSaga datasets.")
-    parser.add_argument("--human-eval", type=str, required=True, help="Path to HumanEval.jsonl")
-    parser.add_argument("--pythonsaga", type=str, required=True, help="Path to PythonSaga JSONL file")
-    parser.add_argument("-o", "--output-json", type=str, default="artifacts/programs/runner_programs.json", help="Output JSON file name for complex programs.")
-    parser.add_argument("-d", "--output-dir", type=str, default="artifacts/programs", help="Main output directory for all program files.")
-    args = parser.parse_args()
-
-    main_output_dir = Path(args.output_dir)
+    args = parse_args()
+    main_output_dir = args.output_dir
     runner_dir = main_output_dir / "runner_programs"
     simple_dir = main_output_dir / "programs_lacking_conditional_or_loop"
 

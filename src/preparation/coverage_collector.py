@@ -23,19 +23,6 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 
 SLIPCOVER_TIMEOUT_SECONDS = 60
-DEFAULT_RUNNER_JSON = "artifacts/programs/runner_programs.json"
-DEFAULT_OUTPUT_JSON = "artifacts/programs/runner_programs_with_coverage.json"
-RAP_OUTPUT_JSON = "artifacts/programs/runner_programs_with_coverage_rap.json"
-LEAST_COVERAGE_OUTPUT_JSON = "artifacts/programs/runner_programs_with_least_coverage.json"
-
-
-DATASET_PATHS = {
-    "HumanEval": "artifacts/programs/runner_programs",
-    "PythonSaga": "artifacts/programs/runner_programs",
-    "CRUXEval": "data/CRUXEval/formatted_cruxeval_programs"
-}
-
-
 
 def make_json_safe(obj: Any) -> Any:
     if isinstance(obj, set):
@@ -413,17 +400,15 @@ def get_all_executable_lines(code_string: str) -> Set[int]:
 
 
 
-def find_all_scripts() -> List[Tuple[Path, str]]:
+def find_all_scripts(runner_programs_dir: Path, cruxeval_dir: Path) -> List[Tuple[Path, str]]:
     """
     Find all scripts across all datasets.
     Returns list of (script_path, dataset_name) tuples.
     """
     scripts = []
 
-
-    runner_dir = Path("artifacts/programs/runner_programs")
-    if runner_dir.exists():
-        for dataset_dir in runner_dir.iterdir():
+    if runner_programs_dir.exists():
+        for dataset_dir in runner_programs_dir.iterdir():
             if dataset_dir.is_dir():
                 if dataset_dir.name.startswith("HumanEval_"):
                     solution_path = dataset_dir / "solution.py"
@@ -435,7 +420,6 @@ def find_all_scripts() -> List[Tuple[Path, str]]:
                         scripts.append((solution_path, "PythonSaga"))
 
 
-    cruxeval_dir = Path("data/CRUXEval/formatted_cruxeval_programs")
     if cruxeval_dir.exists():
         for script_path in cruxeval_dir.glob("sample_*.py"):
             scripts.append((script_path, "CRUXEval"))
@@ -545,25 +529,86 @@ def extract_coverage_from_output(script_path: Path, script_content: str, slipcov
 
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Run SlipCover on runner programs and collect coverage metadata.")
-    parser.add_argument("--runner_json", type=str, default=DEFAULT_RUNNER_JSON, help="Path to artifacts/programs/runner_programs.json")
-    parser.add_argument("--output_json", type=str, default=DEFAULT_OUTPUT_JSON, help="Path to output JSON with coverage metadata")
-    parser.add_argument("--rap_output_json", type=str, default=RAP_OUTPUT_JSON, help="Path to output JSON with RAP coverage metadata")
-    parser.add_argument("--least_coverage_output_json", type=str, default=LEAST_COVERAGE_OUTPUT_JSON, help="Path to output JSON with Least Coverage metadata")
-    parser.add_argument("--venv_path", type=str, default="", help="Optional virtualenv path containing python and slipcover")
-    parser.add_argument("--timeout", type=int, default=SLIPCOVER_TIMEOUT_SECONDS, help="Timeout seconds per script run")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    args = parser.parse_args()
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Run SlipCover on runner programs and collect coverage metadata."
+    )
 
+    parser.add_argument(
+        "--runner-json",
+        type=Path,
+        default=Path("artifacts/programs/runner_programs.json"),
+        help="Path to runner_programs.json."
+    )
+
+    parser.add_argument(
+        "--output-json",
+        type=Path,
+        default=Path("artifacts/programs/runner_programs_with_coverage.json"),
+        help="Path to output JSON with coverage metadata."
+    )
+
+    parser.add_argument(
+        "--rap-output-json",
+        type=Path,
+        default=Path("artifacts/programs/runner_programs_with_coverage_rap.json"),
+        help="Path to output JSON with RAP coverage metadata."
+    )
+
+    parser.add_argument(
+        "--least-coverage-output-json",
+        type=Path,
+        default=Path("artifacts/programs/runner_programs_with_least_coverage.json"),
+        help="Path to output JSON with Least Coverage metadata."
+    )
+
+    parser.add_argument(
+        "--runner-programs-dir",
+        type=Path,
+        default=Path("artifacts/programs/runner_programs"),
+        help="Directory containing HumanEval and PythonSaga runner programs."
+    )
+
+    parser.add_argument(
+        "--cruxeval-dir",
+        type=Path,
+        default=Path("data/CRUXEval/formatted_cruxeval_programs"),
+        help="Directory containing formatted CRUXEval programs."
+    )
+
+    parser.add_argument(
+        "--venv-path",
+        type=Path,
+        default=None,
+        help="Optional virtualenv path containing python and slipcover."
+    )
+
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=SLIPCOVER_TIMEOUT_SECONDS,
+        help="Timeout seconds per script run."
+    )
+
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging."
+    )
+
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
     log_level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(level=log_level, format="%(asctime)s - %(levelname)s - %(message)s")
 
-    runner_json_path = Path(args.runner_json)
-    output_json_path = Path(args.output_json)
-    rap_output_json_path = Path(args.rap_output_json)
-    least_coverage_output_json_path = Path(args.least_coverage_output_json)
-    venv_path = args.venv_path or ""
+    runner_json_path = args.runner_json
+    output_json_path = args.output_json
+    rap_output_json_path = args.rap_output_json
+    least_coverage_output_json_path = args.least_coverage_output_json
+    venv_path = args.venv_path
 
 
     runner_map: Dict[str, Dict[str, Any]] = {}
@@ -579,7 +624,7 @@ def main():
         logging.warning("Runner JSON not found: %s. Will create entries for all scripts.", runner_json_path)
 
 
-    all_scripts = find_all_scripts()
+    all_scripts = find_all_scripts(args.runner_programs_dir, args.cruxeval_dir)
     if not all_scripts:
         logging.error("No scripts found in any dataset directory!")
         return
