@@ -11,14 +11,8 @@ import re
 import networkx as nx
 from pathlib import Path
 from typing import List, Dict, Tuple, Set, Optional, Any
+import argparse
 
-
-HUMANEVAL_BASE = Path("artifacts/programs/runner_programs")
-PYTHONSAGA_BASE = Path("artifacts/programs/runner_programs")
-CRUXEVAL_BASE = Path("data/CRUXEval/formatted_cruxeval_programs")
-FOCC_OUTPUT_DIR = Path("artifacts/programs/focc")
-COVERAGE_FILE = Path("artifacts/programs/runner_programs_with_coverage.json")
-FOCC_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 class CFGBuilder:
     """Build Control Flow Graph and generate execution paths."""
@@ -837,7 +831,7 @@ class FOCCGenerator:
         crispe_dir.mkdir(exist_ok=True)
 
 
-        template_path = Path("data/prompts/reasoning/crispe_predict_coverage_original.txt")
+        template_path = CRISPE_TEMPLATE
         if template_path.exists():
             template = template_path.read_text(encoding='utf-8')
         else:
@@ -855,16 +849,86 @@ class FOCCGenerator:
         print(f"\n Generated {generated_count} CRISPE-ready files in {crispe_dir}")
 
 
-if __name__ == "__main__":
-    import argparse
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generate and validate FOCCs."
+    )
 
-    parser = argparse.ArgumentParser(description='Generate and validate FOCCs')
-    parser.add_argument('--max-paths', type=int, default=50,
-                       help='Maximum number of paths to explore in CFG (default: 50)')
-    parser.add_argument('--no-validate', action='store_true',
-                       help='Skip ground truth validation')
+    parser.add_argument(
+        "--max-paths",
+        type=int,
+        default=50,
+        help="Maximum number of paths to explore in CFG."
+    )
 
-    args = parser.parse_args()
+    parser.add_argument(
+        "--no-validate",
+        action="store_true",
+        help="Skip ground truth validation."
+    )
+
+    parser.add_argument(
+        "--runner-programs-dir",
+        type=Path,
+        default=Path("artifacts/programs/runner_programs"),
+        help="Directory containing HumanEval and PythonSaga runner programs."
+    )
+
+    parser.add_argument(
+        "--cruxeval-dir",
+        type=Path,
+        default=Path("data/CRUXEval/formatted_cruxeval_programs"),
+        help="Directory containing formatted CRUXEval programs."
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("artifacts/programs/focc"),
+        help="Directory where FOCC outputs will be saved."
+    )
+
+    parser.add_argument(
+        "--coverage-file",
+        type=Path,
+        default=Path(
+            "artifacts/programs/"
+            "runner_programs_with_coverage.json"
+        ),
+        help="Path to the coverage JSON file used for validation."
+    )
+
+    parser.add_argument(
+        "--crispe-template",
+        type=Path,
+        default=Path(
+            "data/prompts/reasoning/"
+            "crispe_predict_coverage_original.txt"
+        ),
+        help="Path to the CRISPE prompt template."
+    )
+
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    global HUMANEVAL_BASE
+    global PYTHONSAGA_BASE
+    global CRUXEVAL_BASE
+    global FOCC_OUTPUT_DIR
+    global COVERAGE_FILE
+    global CRISPE_TEMPLATE
+
+    HUMANEVAL_BASE = args.runner_programs_dir
+    PYTHONSAGA_BASE = args.runner_programs_dir
+    CRUXEVAL_BASE = args.cruxeval_dir
+    FOCC_OUTPUT_DIR = args.output_dir
+    COVERAGE_FILE = args.coverage_file
+    CRISPE_TEMPLATE = args.crispe_template
+
+    FOCC_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     generator = FOCCGenerator(max_paths=args.max_paths)
 
@@ -873,3 +937,7 @@ if __name__ == "__main__":
         print("Ground truth validation disabled")
 
     generator.collect_and_save()
+
+
+if __name__ == "__main__":
+    main()

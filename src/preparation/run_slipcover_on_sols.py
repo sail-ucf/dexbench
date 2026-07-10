@@ -3,9 +3,8 @@ import re
 import shutil
 import json
 from pathlib import Path
+import argparse
 
-ROOT_DIR = Path("artifacts/programs/runner_programs")
-RUNNER_JSON_PATH = Path("artifacts/programs/runner_programs.json")
 TIMEOUT = 30
 
 def run_slipcover(program_path: Path) -> tuple[float | None, bool, str]:
@@ -139,25 +138,51 @@ def get_entry_point_name(code: str) -> str | None:
         print("Could not find entry point function")
         return None
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run SlipCover on runner programs and remove or update "
+            "programs that still have 100% coverage."
+        )
+    )
+
+    parser.add_argument(
+        "--runner-dir",
+        type=Path,
+        default=Path("artifacts/programs/runner_programs"),
+        help="Directory containing runner program folders."
+    )
+
+    parser.add_argument(
+        "--runner-json",
+        type=Path,
+        default=Path("artifacts/programs/runner_programs.json"),
+        help="Path to the runner programs JSON file."
+    )
+
+    return parser.parse_args()
+
 def main():
 
-    if not RUNNER_JSON_PATH.exists():
-        print(f"artifacts/programs/runner_programs.json not found at {RUNNER_JSON_PATH}")
+    args = parse_args()
+
+    if not args.runner_json.exists():
+        print(f"Runner programs JSON not found: {args.runner_json}")
         return
 
     try:
-        with open(RUNNER_JSON_PATH, 'r', encoding='utf-8') as f:
+        with open(args.runner_json, 'r', encoding='utf-8') as f:
             runner_programs = json.load(f)
-        print(f"Loaded {len(runner_programs)} programs from artifacts/programs/runner_programs.json")
+        print(f"Loaded {len(runner_programs)} programs from {args.runner_json}")
     except Exception as e:
-        print(f"Failed to load artifacts/programs/runner_programs.json: {e}")
+        print(f"Failed to load {args.runner_json}: {e}")
         return
 
 
     program_map = {prog['task_id']: prog for prog in runner_programs}
     json_updated = False
 
-    runner_dirs = sorted(p for p in ROOT_DIR.iterdir() if p.is_dir())
+    runner_dirs = sorted(p for p in args.runner_dir.iterdir() if p.is_dir())
     print(f"Found {len(runner_dirs)} runner programs. Processing...")
 
     kept = 0
@@ -243,7 +268,7 @@ def main():
                 if task_id in program_map and updated_code:
                     program_map[task_id]['runnable_script'] = updated_code
                     json_updated = True
-                    print(f"Updated artifacts/programs/runner_programs.json entry for {task_id}")
+                    print(f"Updated {args.runner_json} entry for {task_id}")
                 break
             else:
                 print(f"Still 100% coverage with this assertion")
@@ -256,13 +281,13 @@ def main():
 
     if json_updated:
         try:
-            with open(RUNNER_JSON_PATH, 'w', encoding='utf-8') as f:
+            with open(args.runner_json, 'w', encoding='utf-8') as f:
                 json.dump(runner_programs, f, indent=4)
-            print(f"\n Successfully updated artifacts/programs/runner_programs.json with {updated} modified programs")
+            print(f"\n Successfully updated {args.runner_json} with {updated} modified programs")
         except Exception as e:
-            print(f"Failed to update artifacts/programs/runner_programs.json: {e}")
+            print(f"Failed to update {args.runner_json}: {e}")
     else:
-        print(f"\n No updates needed for artifacts/programs/runner_programs.json")
+        print(f"\n No updates needed for {args.runner_json}")
 
     print(f"\n{'='*60}")
     print("FINAL SUMMARY:")

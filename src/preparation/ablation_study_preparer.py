@@ -12,11 +12,8 @@ import re
 import shutil
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
+import argparse
 
-ROOT = Path(".")
-COVERAGE_JSON = ROOT / "data" / "programs" / "runner_programs_with_coverage.json"
-ABLATION_JSON = ROOT / "data" / "programs" / "ablation_study_programs_with_coverage.json"
-ABLATION_DIR = ROOT / "data" / "programs" / "ablation_study_programs"
 INPUT_PLACEHOLDER = "DEXBENCH_INPUT_PLACEHOLDER"
 
 def convert_to_ablation_format(script_source: str) -> Optional[str]:
@@ -85,14 +82,14 @@ def get_program_filename(task_id: str) -> str:
 
         return f"{task_id.replace('/', '_')}.py"
 
-def create_ablation_program_files(programs_data: List[Dict[str, Any]]):
+def create_ablation_program_files(programs_data: List[Dict[str, Any]], ablation_dir: Path):
     """Create ablation study program files in flat directory"""
     print("Creating ablation study program files...")
 
 
-    if ABLATION_DIR.exists():
-        shutil.rmtree(ABLATION_DIR)
-    ABLATION_DIR.mkdir(parents=True, exist_ok=True)
+    if ablation_dir.exists():
+        shutil.rmtree(ablation_dir)
+    ablation_dir.mkdir(parents=True, exist_ok=True)
 
     created_count = 0
     skipped_count = 0
@@ -111,7 +108,7 @@ def create_ablation_program_files(programs_data: List[Dict[str, Any]]):
 
 
         filename = get_program_filename(task_id)
-        program_file = ABLATION_DIR / filename
+        program_file = ablation_dir / filename
 
 
         program_file.write_text(ablation_script, encoding="utf-8")
@@ -123,7 +120,7 @@ def create_ablation_program_files(programs_data: List[Dict[str, Any]]):
     print(f"Skipped {skipped_count} programs")
     return created_count
 
-def create_ablation_json(programs_data: List[Dict[str, Any]]):
+def create_ablation_json(programs_data: List[Dict[str, Any]], ablation_json: Path):
     """Create ablation study JSON with updated runnable scripts"""
     print("Creating ablation study JSON...")
 
@@ -154,25 +151,65 @@ def create_ablation_json(programs_data: List[Dict[str, Any]]):
         ablation_data.append(ablation_program)
 
 
-    with open(ABLATION_JSON, "w", encoding="utf-8") as f:
+    ablation_json.parent.mkdir(parents=True, exist_ok=True)
+    with open(ablation_json, "w", encoding="utf-8") as f:
         json.dump(ablation_data, f, indent=2)
 
     print(f"Created ablation JSON with {len(ablation_data)} programs")
     print(f"Skipped {skipped_count} programs")
     return ablation_data
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Create ablation-study programs and metadata JSON."
+    )
+
+    parser.add_argument(
+        "--coverage-json",
+        type=Path,
+        default=Path(
+            "data/programs/"
+            "runner_programs_with_coverage.json"
+        ),
+        help="Path to the original coverage JSON file."
+    )
+
+    parser.add_argument(
+        "--ablation-json",
+        type=Path,
+        default=Path(
+            "data/programs/"
+            "ablation_study_programs_with_coverage.json"
+        ),
+        help="Path where the ablation-study JSON file will be saved."
+    )
+
+    parser.add_argument(
+        "--ablation-dir",
+        type=Path,
+        default=Path(
+            "data/programs/"
+            "ablation_study_programs"
+        ),
+        help="Directory where ablation-study program files will be saved."
+    )
+
+    return parser.parse_args()
+
 def main():
     """Main execution"""
+    args = parse_args()
+
     print("Preparing Ablation Study Programs")
     print("=" * 50)
 
 
-    if not COVERAGE_JSON.exists():
-        print(f"Original coverage JSON not found: {COVERAGE_JSON}")
+    if not args.coverage_json.exists():
+        print(f"Original coverage JSON not found: {args.coverage_json}")
         return
 
     try:
-        with open(COVERAGE_JSON, "r", encoding="utf-8") as f:
+        with open(args.coverage_json, "r", encoding="utf-8") as f:
             programs_data = json.load(f)
         print(f"Loaded {len(programs_data)} programs from original data")
     except Exception as e:
@@ -180,10 +217,10 @@ def main():
         return
 
 
-    file_count = create_ablation_program_files(programs_data)
+    file_count = create_ablation_program_files(programs_data, args.ablation_dir)
 
 
-    ablation_data = create_ablation_json(programs_data)
+    ablation_data = create_ablation_json(programs_data, args.ablation_json)
 
 
     print("\n" + "=" * 50)
@@ -191,16 +228,17 @@ def main():
     print("=" * 50)
     print(f"Created files: {file_count}")
     print(f"Created JSON entries: {len(ablation_data)}")
-    print(f"Output directory: {ABLATION_DIR}")
-    print(f"Output JSON: {ABLATION_JSON}")
+    print(f"Output directory: {args.ablation_dir}")
+    print(f"Output JSON: {args.ablation_json}")
 
 
     print(f"\nDirectory structure:")
-    sample_files = list(ABLATION_DIR.glob("*.py"))[:5]
+    sample_files = list(args.ablation_dir.glob("*.py"))[:5]
     for file in sample_files:
         print(f"  {file.name}")
-    if len(list(ABLATION_DIR.glob("*.py"))) > 5:
-        print(f"  ... and {len(list(ABLATION_DIR.glob('*.py'))) - 5} more files")
+    total_files = len(list(args.ablation_dir.glob("*.py")))
+    if total_files > 5:
+        print(f"  ... and {total_files - 5} more files")
 
 
     if ablation_data:
